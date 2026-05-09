@@ -2,9 +2,15 @@ import numpy as np
 import pandas as pd
 from sklearn.tree import DecisionTreeRegressor, plot_tree
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import matplotlib.pyplot as plt
+
+from sklearn.svm import SVR
+from sklearn.preprocessing import StandardScaler
+
+
+
 
 # Load data
 df = pd.read_csv("earthquake_data.csv", on_bad_lines="skip")
@@ -81,3 +87,79 @@ plt.title("Feature Importances")
 plt.bar(range(len(importances)), importances[indices])
 plt.xticks(range(len(importances)), X.columns[indices], rotation=90)
 plt.show()
+
+
+# ── 1. Load & prepare ────────────────────────────────────────────────────────
+
+df = pd.read_csv("earthquake_data.csv")
+
+FEATURES = ["magnitude", "longitude", "latitude", "depth"]
+TARGET   = "sig"
+
+df_clean = df[FEATURES + [TARGET]].dropna()
+print(f"Samples after dropping NaNs: {len(df_clean)}  (original: {len(df)})")
+print(f"\nTarget (sig) stats:\n{df_clean[TARGET].describe().round(2)}\n")
+
+X = df_clean[FEATURES].values
+y = df_clean[TARGET].values
+
+# ── 2. Scale ─────────────────────────────────────────────────────────────────
+
+scaler_X = StandardScaler()
+scaler_y = StandardScaler()          # scale target too — helps SVR greatly
+
+X_scaled = scaler_X.fit_transform(X)
+y_scaled = scaler_y.fit_transform(y.reshape(-1, 1)).ravel()
+
+# ── 3. Train / test split ─────────────────────────────────────────────────────
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled, y_scaled, test_size=0.2, random_state=42
+)
+
+# ── 4. Grid search for best C & epsilon ──────────────────────────────────────
+
+print("Running GridSearchCV (RBF kernel) …")
+param_grid = {
+    "C":       [0.1, 1, 10, 100],
+    "epsilon": [0.01, 0.1, 0.5],
+    "gamma":   ["scale", "auto"],
+}
+grid = GridSearchCV(
+    SVR(kernel="rbf"),
+    param_grid,
+    cv=5,
+    scoring="r2",
+    n_jobs=-1,
+    verbose=0,
+)
+grid.fit(X_train, y_train)
+best_params = grid.best_params_
+print(f"Best params: {best_params}")
+print(f"Best CV R²:  {grid.best_score_:.4f}\n")
+
+# ── 5. Final model ────────────────────────────────────────────────────────────
+
+model = grid.best_estimator_
+
+y_pred_scaled = model.predict(X_test)
+
+# Inverse-transform back to original sig scale
+y_pred = scaler_y.inverse_transform(y_pred_scaled.reshape(-1, 1)).ravel()
+y_true = scaler_y.inverse_transform(y_test.reshape(-1, 1)).ravel()
+
+mae  = mean_absolute_error(y_true, y_pred)
+rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+r2   = r2_score(y_true, y_pred)
+
+print("=" * 50)
+print("  SVR Regression Results (sig prediction)")
+print("=" * 50)
+print(f"  MAE  : {mae:.2f}")
+print(f"  RMSE : {rmse:.2f}")
+print(f"  R²   : {r2:.4f}")
+print("=" * 50)
+
+# 5-fold CV on full data
+cv_r2 = cross_val_score(model, X_scaled, y_scaled, cv=5, scoring="r2")
+print(f"\n  5-fold CV R² : {cv_r2.mean():.4f} ± {cv_r2.std():.4f}")
