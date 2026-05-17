@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeRegressor, plot_tree
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
@@ -88,6 +89,126 @@ plt.bar(range(len(importances)), importances[indices])
 plt.xticks(range(len(importances)), X.columns[indices], rotation=90)
 plt.show()
 
+
+# ── 2. Define features and target ────────────────────────────────────────────
+ 
+TARGET   = "sig"
+FEATURES = [col for col in df.columns if col != TARGET]
+ 
+X = df[FEATURES]
+y = df[TARGET]
+ 
+print(f"Dataset shape : {df.shape}")
+print(f"Features used : {FEATURES}\n")
+ 
+# ── 3. Scale features ─────────────────────────────────────────────────────────
+# Linear regression isn't sensitive to scale for coefficient estimation,
+# but scaling makes coefficients comparable and improves numerical stability.
+ 
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+ 
+# ── 4. Train / test split ─────────────────────────────────────────────────────
+ 
+X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled, y, test_size=0.2, random_state=42
+)
+ 
+# ── 5. Fit model ──────────────────────────────────────────────────────────────
+ 
+model = LinearRegression()
+model.fit(X_train, y_train)
+ 
+# ── 6. Evaluate ───────────────────────────────────────────────────────────────
+ 
+y_pred = model.predict(X_test)
+ 
+mae  = mean_absolute_error(y_test, y_pred)
+mse  = mean_squared_error(y_test, y_pred)
+rmse = np.sqrt(mse)
+r2   = r2_score(y_test, y_pred)
+ 
+print("=" * 50)
+print("  Linear Regression Results (sig prediction)")
+print("=" * 50)
+print(f"  MAE  : {mae:.2f}")
+print(f"  MSE  : {mse:.2f}")
+print(f"  RMSE : {rmse:.2f}")
+print(f"  R²   : {r2:.4f}")
+print("=" * 50)
+ 
+# 5-fold cross-validation
+cv_r2 = cross_val_score(model, X_scaled, y, cv=5, scoring="r2")
+print(f"\n  5-fold CV R² : {cv_r2.mean():.4f} ± {cv_r2.std():.4f}\n")
+ 
+# ── 7. Feature coefficients ───────────────────────────────────────────────────
+# Scaled coefficients show the relative importance of each feature.
+ 
+coef_df = pd.DataFrame({
+    "feature"    : FEATURES,
+    "coefficient": model.coef_
+}).sort_values("coefficient", key=abs, ascending=False)
+ 
+print("Feature coefficients (sorted by absolute value):")
+print(coef_df.to_string(index=False))
+print(f"\nIntercept: {model.intercept_:.2f}")
+ 
+
+fig, ax = plt.subplots(figsize=(8, 7))
+ 
+# --- colour-code by residual magnitude ---
+residuals     = y_test - y_pred
+abs_residuals = np.abs(residuals)
+norm          = plt.Normalize(abs_residuals.min(), abs_residuals.max())
+colours       = plt.cm.RdYlGn_r(norm(abs_residuals))  # green=small error, red=large
+ 
+scatter = ax.scatter(
+    y_test, y_pred,
+    c=abs_residuals, cmap="RdYlGn_r",
+    alpha=0.65, edgecolors="none", s=40, zorder=3
+)
+ 
+# --- perfect-fit diagonal ---
+lims = [min(y_test.min(), y_pred.min()) - 20,
+        max(y_test.max(), y_pred.max()) + 20]
+ax.plot(lims, lims, "k--", linewidth=1.2, label="Perfect fit", zorder=2)
+ 
+# --- ±RMSE band around the diagonal ---
+ax.fill_between(lims,
+                [l - rmse for l in lims],
+                [l + rmse for l in lims],
+                alpha=0.08, color="steelblue", label=f"±RMSE band ({rmse:.0f})")
+ 
+# --- colour bar ---
+cbar = fig.colorbar(scatter, ax=ax, pad=0.02)
+cbar.set_label("Absolute error", fontsize=11)
+ 
+# --- metric annotation box ---
+stats_text = (
+    f"R²   = {r2:.3f}\n"
+    f"RMSE = {rmse:.1f}\n"
+    f"MAE  = {mae:.1f}"
+)
+ax.text(
+    0.04, 0.96, stats_text,
+    transform=ax.transAxes,
+    fontsize=10, verticalalignment="top",
+    bbox=dict(boxstyle="round,pad=0.5", facecolor="white",
+              edgecolor="#cccccc", alpha=0.85)
+)
+ 
+# --- labels ---
+ax.set_xlabel("Actual sig", fontsize=12)
+ax.set_ylabel("Predicted sig", fontsize=12)
+ax.set_title("Linear Regression — Actual vs Predicted (sig)", fontsize=13, pad=12)
+ax.set_xlim(lims)
+ax.set_ylim(lims)
+ax.set_aspect("equal")
+ax.legend(fontsize=10, loc="lower right")
+ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.4)
+ 
+plt.tight_layout()
+plt.show()
 
 # ── 1. Load & prepare ────────────────────────────────────────────────────────
 
