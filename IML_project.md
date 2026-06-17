@@ -1,4 +1,5 @@
 Earthquake predictor
 
-Earthquake prediction remains one of the most challenging and impactful problems in geoscience, where accurate forecasting can help reduce loss of life and property damage. In this project, machine learning techniques such as Random Forest, Support Vector Classifier, and Gradient Boosting are applied to analyze seismic data and improve the prediction of earthquake events.
+Earthquake prediction remains one of the most challenging and impactful problems in geoscience, where accurate forecasting can help reduce loss of life and property damage. In this project, machine learning techniques such as Random Forest, Support Vector algorithm, and Linear Regression are applied to analyze seismic data and improve the prediction of earthquake events.
 
+To predict earthquake significance, we used four features: magnitude, latitude, longitude, and depth. The dataset was sourced from historical earthquake records spanning 1995 to 2023, and split into 80% training and 20% testing subsets. Three regression algorithms were trained on the training set, and their performance was compared using the Root Mean Square Error (RMSE) evaluated on the held-out test data.
