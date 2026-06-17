@@ -23,14 +23,16 @@ df = df.drop(columns=[
         'location', 'continent', 'country'
 ])
 
+# ── Define features and target ────────────────────────────────────────────
 # Remove missing values
 df = df.dropna()
-
+TARGET   = "sig"
+FEATURES = [col for col in df.columns if col != TARGET]
 # Target
-y = df["sig"]
+y = df[TARGET]
 
 # Features
-X = df.drop(columns=["sig"])
+X = df[FEATURES]
 feature_names = X.columns.astype(str)
 # Split
 X_train, X_test, y_train, y_test = train_test_split(
@@ -39,7 +41,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 
 
-# Simple decision tree
+# Simple decision tree─────────────────────────────────────────────────────────
 reg = DecisionTreeRegressor(max_depth=5, random_state=42)
 reg.fit(X_train, y_train)
 
@@ -57,30 +59,51 @@ plt.show()
 
 
 
-#Random Forest
-# Train Random Forest
-rf = RandomForestRegressor(
-    n_estimators=100,     # number of trees
-    max_depth=5,       # limit tree depth to prevent overfitting
-    random_state=42,
-                 
-)
+#Random Forest─────────────────────────────────────────────────────────
 
-rf.fit(X_train, y_train)
 
-# Predict
-y_pred = rf.predict(X_test)
+depths = range(1, 21)
+train_r2 = []
+test_r2  = []
 
-# Evaluate
+for depth in depths:
+    rf = RandomForestRegressor(n_estimators=100, max_depth=depth, random_state=42)
+    rf.fit(X_train, y_train)
+    train_r2.append(r2_score(y_train, rf.predict(X_train)))
+    test_r2.append(r2_score(y_test,  rf.predict(X_test)))
+
+# Find best depth
+
+best_depth = depths[np.argmax(test_r2)]
+best_r2    = max(test_r2)
+print(f"Best max_depth: {best_depth}  →  Test R² = {best_r2:.3f}")
+
+# Plot
+
+plt.figure(figsize=(10, 5))
+plt.plot(depths, train_r2, label="Train R²", marker="o")
+plt.plot(depths, test_r2,  label="Test R²",  marker="o")
+plt.axvline(best_depth, color="red", linestyle="--", label=f"Best depth = {best_depth}")
+plt.xlabel("max_depth")
+plt.ylabel("R² Score")
+plt.title("Random Forest: max_depth Optimization")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# Retrain with best depth 
+
+rf_best = RandomForestRegressor(n_estimators=100, max_depth=5, random_state=42)
+rf_best.fit(X_train, y_train)
+y_pred = rf_best.predict(X_test)
+
 mse = mean_squared_error(y_test, y_pred)
-r2 = r2_score(y_test, y_pred)
-
 print(f"MSE: {mse:.3f}")
-print(f"R² score: {r2:.3f}")
+print(f"R² score: {best_r2:.3f}")
 
 #plotting the feature importance
-
-importances = rf.feature_importances_
+importances = rf_best.feature_importances_
 indices = np.argsort(importances)[::-1]
 
 plt.figure(figsize=(10, 6))
@@ -89,37 +112,27 @@ plt.bar(range(len(importances)), importances[indices])
 plt.xticks(range(len(importances)), X.columns[indices], rotation=90)
 plt.show()
 
-
-# ── 2. Define features and target ────────────────────────────────────────────
+#Linear Regression─────────────────────────────────────────────────────────
  
-TARGET   = "sig"
-FEATURES = [col for col in df.columns if col != TARGET]
- 
-X = df[FEATURES]
-y = df[TARGET]
- 
-print(f"Dataset shape : {df.shape}")
-print(f"Features used : {FEATURES}\n")
- 
-# ── 3. Scale features ─────────────────────────────────────────────────────────
+#  Scale features 
 # Linear regression isn't sensitive to scale for coefficient estimation,
 # but scaling makes coefficients comparable and improves numerical stability.
  
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
- 
-# ── 4. Train / test split ─────────────────────────────────────────────────────
+y_scaled = scaler.fit_transform(y.values.reshape(-1, 1)).ravel()
+#Train / test split 
  
 X_train, X_test, y_train, y_test = train_test_split(
     X_scaled, y, test_size=0.2, random_state=42
 )
  
-# ── 5. Fit model ──────────────────────────────────────────────────────────────
+#Fit model
  
 model = LinearRegression()
 model.fit(X_train, y_train)
  
-# ── 6. Evaluate ───────────────────────────────────────────────────────────────
+# Evaluate 
  
 y_pred = model.predict(X_test)
  
@@ -141,7 +154,7 @@ print("=" * 50)
 cv_r2 = cross_val_score(model, X_scaled, y, cv=5, scoring="r2")
 print(f"\n  5-fold CV R² : {cv_r2.mean():.4f} ± {cv_r2.std():.4f}\n")
  
-# ── 7. Feature coefficients ───────────────────────────────────────────────────
+# Feature coefficients 
 # Scaled coefficients show the relative importance of each feature.
  
 coef_df = pd.DataFrame({
@@ -156,7 +169,7 @@ print(f"\nIntercept: {model.intercept_:.2f}")
 
 fig, ax = plt.subplots(figsize=(8, 7))
  
-# --- colour-code by residual magnitude ---
+# colour-code by residual magnitude 
 residuals     = y_test - y_pred
 abs_residuals = np.abs(residuals)
 norm          = plt.Normalize(abs_residuals.min(), abs_residuals.max())
@@ -168,22 +181,22 @@ scatter = ax.scatter(
     alpha=0.65, edgecolors="none", s=40, zorder=3
 )
  
-# --- perfect-fit diagonal ---
+# perfect-fit diagonal 
 lims = [min(y_test.min(), y_pred.min()) - 20,
         max(y_test.max(), y_pred.max()) + 20]
 ax.plot(lims, lims, "k--", linewidth=1.2, label="Perfect fit", zorder=2)
  
-# --- ±RMSE band around the diagonal ---
+# ±RMSE band around the diagonal
 ax.fill_between(lims,
                 [l - rmse for l in lims],
                 [l + rmse for l in lims],
                 alpha=0.08, color="steelblue", label=f"±RMSE band ({rmse:.0f})")
  
-# --- colour bar ---
+# colour bar 
 cbar = fig.colorbar(scatter, ax=ax, pad=0.02)
 cbar.set_label("Absolute error", fontsize=11)
  
-# --- metric annotation box ---
+# metric annotation box 
 stats_text = (
     f"R²   = {r2:.3f}\n"
     f"RMSE = {rmse:.1f}\n"
@@ -210,35 +223,16 @@ ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.4)
 plt.tight_layout()
 plt.show()
 
-# ── 1. Load & prepare ────────────────────────────────────────────────────────
 
-df = pd.read_csv("earthquake_data.csv")
 
-FEATURES = ["magnitude", "longitude", "latitude", "depth"]
-TARGET   = "sig"
-
-df_clean = df[FEATURES + [TARGET]].dropna()
-print(f"Samples after dropping NaNs: {len(df_clean)}  (original: {len(df)})")
-print(f"\nTarget (sig) stats:\n{df_clean[TARGET].describe().round(2)}\n")
-
-X = df_clean[FEATURES].values
-y = df_clean[TARGET].values
-
-# ── 2. Scale ─────────────────────────────────────────────────────────────────
-
-scaler_X = StandardScaler()
-scaler_y = StandardScaler()          # scale target too — helps SVR greatly
-
-X_scaled = scaler_X.fit_transform(X)
-y_scaled = scaler_y.fit_transform(y.reshape(-1, 1)).ravel()
-
-# ── 3. Train / test split ─────────────────────────────────────────────────────
+#SVR─────────────────────────────────────────────────────────
+#  Train / test split 
 
 X_train, X_test, y_train, y_test = train_test_split(
     X_scaled, y_scaled, test_size=0.2, random_state=42
 )
 
-# ── 4. Grid search for best C & epsilon ──────────────────────────────────────
+# Grid search for best C & epsilon 
 
 print("Running GridSearchCV (RBF kernel) …")
 param_grid = {
@@ -259,15 +253,15 @@ best_params = grid.best_params_
 print(f"Best params: {best_params}")
 print(f"Best CV R²:  {grid.best_score_:.4f}\n")
 
-# ── 5. Final model ────────────────────────────────────────────────────────────
+# Final model
 
 model = grid.best_estimator_
 
 y_pred_scaled = model.predict(X_test)
 
 # Inverse-transform back to original sig scale
-y_pred = scaler_y.inverse_transform(y_pred_scaled.reshape(-1, 1)).ravel()
-y_true = scaler_y.inverse_transform(y_test.reshape(-1, 1)).ravel()
+y_pred = scaler.inverse_transform(y_pred_scaled.reshape(-1, 1)).ravel()
+y_true = scaler.inverse_transform(y_test.reshape(-1, 1)).ravel()
 
 mae  = mean_absolute_error(y_true, y_pred)
 rmse = np.sqrt(mean_squared_error(y_true, y_pred))
