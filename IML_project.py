@@ -278,3 +278,38 @@ print("=" * 50)
 # 5-fold CV on full data
 cv_r2 = cross_val_score(model, X_scaled, y_scaled, cv=5, scoring="r2")
 print(f"\n  5-fold CV R² : {cv_r2.mean():.4f} ± {cv_r2.std():.4f}")
+#plotting the optimazition
+# Extract GridSearchCV results 
+results = pd.DataFrame(grid.cv_results_)
+
+# Heatmap: C vs Epsilon (for each gamma) 
+fig, axes = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)  
+fig.suptitle("GridSearchCV: Mean CV R² — RBF Kernel", fontsize=13, fontweight="bold")
+
+for ax, gamma_val in zip(axes, param_grid["gamma"]):
+    mask = results["param_gamma"] == gamma_val
+    pivot = results[mask].pivot_table(
+        index="param_C",
+        columns="param_epsilon",
+        values="mean_test_score"
+    )
+
+    im = ax.imshow(pivot.values, cmap="RdYlGn", aspect="auto",
+                   vmin=results["mean_test_score"].min(),
+                   vmax=results["mean_test_score"].max())
+
+    ax.set_xticks(range(len(pivot.columns)))
+    ax.set_xticklabels(pivot.columns)
+    ax.set_yticks(range(len(pivot.index)))
+    ax.set_yticklabels(pivot.index)
+    ax.set_xlabel("Epsilon", fontsize=10)
+    ax.set_ylabel("C", fontsize=10)
+    ax.set_title(f"gamma = '{gamma_val}'", fontsize=11)
+
+    for i in range(len(pivot.index)):
+        for j in range(len(pivot.columns)):
+            ax.text(j, i, f"{pivot.values[i, j]:.3f}",
+                    ha="center", va="center", fontsize=9, color="black")
+
+fig.colorbar(im, ax=axes, label="Mean CV R²", shrink=0.8)  
+plt.show()
